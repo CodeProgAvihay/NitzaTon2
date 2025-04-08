@@ -3,8 +3,13 @@ from tkinter import ttk, messagebox
 import sqlite3
 import datetime
 
-# הגדרת מסד הנתונים
-conn = sqlite3.connect("appointments.db")
+BG_COLOR = "#2e3b2e"  # ירוק כהה – צבע רקע
+FG_COLOR = "#d0e0d0"  # ירוק בהיר – צבע טקסט
+BTN_COLOR = "#556b2f"  # זית – כפתורים
+ENTRY_BG = "#3c4f3c"
+ENTRY_FG = "#ffffff"
+
+conn = sqlite3.connect("appointments.sqlite")
 cursor = conn.cursor()
 
 cursor.execute("""
@@ -25,7 +30,7 @@ cursor.execute("""
         soldier_name TEXT,
         injury_type TEXT,
         department TEXT,
-        FOREIGN KEY (user_id) REFERENCES users(id)
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )
 """)
 
@@ -145,22 +150,54 @@ class MainMenu(tk.Frame):
 
     def check_appointments_alert(self):
         now = datetime.datetime.now()
-        today_str = now.strftime('%Y-%m-%d')
-        current_time = now.strftime('%H:%M')
+        next_24h = now + datetime.timedelta(hours=24)
 
         cursor.execute("""
-            SELECT title, time FROM appointments 
-            WHERE date = ? AND user_id = ?
-        """, (today_str, self.controller.user_id))
-        does_was_alert = False
-        for title, time in cursor.fetchall():
-            t = datetime.datetime.strptime(f"{today_str} {time}", "%Y-%m-%d %H:%M")
-            diff = (t - now).total_seconds() / 60
-            if 0 <= diff <= 60:
-                messagebox.showinfo("תזכורת", f"פגישה קרובה בעוד {int(diff)} דקות: {title}")
-                does_was_alert = True
-        if not does_was_alert:
-            messagebox.showinfo("תזכורות", "לא נמצאות פגישות קרובות.")
+            SELECT title, date, time FROM appointments 
+            WHERE user_id = ?
+            ORDER BY date ASC, time ASC
+        """, (self.controller.user_id,))
+
+        appointments = cursor.fetchall()
+
+        upcoming = []
+        for title, date_str, time_str in appointments:
+            try:
+                full_dt = datetime.datetime.strptime(f"{date_str} {time_str}", "%d/%m/%Y %H:%M")
+            except ValueError:
+                continue
+
+            if now <= full_dt <= next_24h:
+                upcoming.append((title, full_dt))
+
+        if not upcoming:
+            messagebox.showinfo("תזכורות", "לא נמצאו פגישות קרובות ב־24 השעות הקרובות.")
+            return
+
+        alert_win = tk.Toplevel(self)
+        alert_win.title("פגישות קרובות")
+        alert_win.configure(bg=BG_COLOR)
+        alert_win.geometry("400x400")
+
+        tk.Label(alert_win, text="פגישות ב־24 השעות הקרובות", font=("Arial", 14), bg=BG_COLOR, fg=FG_COLOR).pack(pady=10)
+
+        for title, full_dt in upcoming:
+            diff = full_dt - now
+            total_minutes = int(diff.total_seconds()) // 60
+            hours, minutes = divmod(total_minutes, 60)
+
+            if hours >= 6:
+                color = "lightgreen"
+            elif hours >= 2:
+                color = "orange"
+            else:
+                color = "red"
+
+            time_left_str = f"{hours} שעות ו־{minutes} דקות"
+            label_text = f"{title} - בעוד {time_left_str}"
+            tk.Label(alert_win, text=label_text, fg=color, bg=BG_COLOR, font=("Arial", 12)).pack(pady=2)
+
+        tk.Button(alert_win, text="סגור", command=alert_win.destroy, bg=BTN_COLOR, fg=FG_COLOR).pack(pady=10)
 
     def logout(self):
         self.controller.user_id = None
