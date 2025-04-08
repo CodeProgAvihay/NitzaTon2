@@ -149,7 +149,7 @@ class MainMenu(tk.Frame):
         logout_button.pack(pady=10)
 
     def check_appointments_alert(self):
-        now = datetime.datetime.now()
+        '''now = datetime.datetime.now()
         next_24h = now + datetime.timedelta(hours=24)
 
         cursor.execute("""
@@ -197,7 +197,34 @@ class MainMenu(tk.Frame):
             label_text = f"{title} - בעוד {time_left_str}"
             tk.Label(alert_win, text=label_text, fg=color, bg=BG_COLOR, font=("Arial", 12)).pack(pady=2)
 
-        tk.Button(alert_win, text="סגור", command=alert_win.destroy, bg=BTN_COLOR, fg=FG_COLOR).pack(pady=10)
+        tk.Button(alert_win, text="סגור", command=alert_win.destroy, bg=BTN_COLOR, fg=FG_COLOR).pack(pady=10)'''
+        now = datetime.datetime.now()
+        tomorrow = now + datetime.timedelta(days=1)
+        cursor.execute("""SELECT title, date, time FROM appointments WHERE user_id = ?""", (self.controller.user_id,))
+
+        upcoming = []
+        for title, date_str, time_str in cursor.fetchall():
+            appointment_dt = datetime.datetime.strptime(f"{date_str} {time_str}", "%d/%m/%Y %H:%M")
+            if now <= appointment_dt <= tomorrow:
+                delta = appointment_dt - now
+                hours = delta.seconds // 3600
+                minutes = (delta.seconds % 3600) // 60
+                upcoming.append(f"{title} - בעוד {hours} שעות ו-{minutes} דקות")
+        alert_win = tk.Toplevel(self)
+        alert_win.title("פגישות קרובות")
+        alert_win.configure(bg=BG_COLOR)
+        alert_win.geometry("500x400")
+        if not upcoming:
+            label = tk.Label(alert_win, text="אין פגישות קרובות", bg=BG_COLOR, fg=FG_COLOR, font=("Arial", 14))
+            label.pack(pady=20)
+            return
+        scrollbar = tk.Scrollbar(alert_win)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        text_box = tk.Text(alert_win, yscrollcommand=scrollbar.set, bg=ENTRY_BG, fg=ENTRY_FG, wrap="word", font=("Arial", 12))
+        text_box.pack(padx=10, pady=10, expand=True, fill="both")
+        scrollbar.config(command=text_box.yview)
+        for item in upcoming:
+            text_box.insert(tk.END, item + "\n\n")
 
     def logout(self):
         self.controller.user_id = None
